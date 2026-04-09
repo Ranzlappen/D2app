@@ -137,8 +137,12 @@ jobs:
 
           # Debug: check restool exists and is the right format
           echo "::group::restool check"
-          ls -la "$SDK_RAW/toolchains/restool"* 2>/dev/null || echo "restool not found"
-          file "$SDK_RAW/toolchains/restool" 2>/dev/null || echo "file command failed"
+          RESTOOL="$SDK_RAW/toolchains/restool"
+          ls -la "$RESTOOL" 2>/dev/null || echo "restool not found at $RESTOOL"
+          file "$RESTOOL" 2>/dev/null || echo "file command failed"
+          ldd "$RESTOOL" 2>/dev/null || echo "ldd failed (may be static or wrong arch)"
+          # Try running it to see the actual error
+          "$RESTOOL" --version 2>&1 || echo "restool execution failed with exit code $?"
           echo "::endgroup::"
 
           # Verify
