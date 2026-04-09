@@ -47,4 +47,8 @@ else
 fi
 
 echo "[hvigorw] Using hvigor at: $HVIGOR_CLI"
+
+# Set NODE_PATH so that hvigorfile.ts imports resolve from hvigor/node_modules
+export NODE_PATH="$HVIGOR_DIR/node_modules:${NODE_PATH:-}"
+
 node "$HVIGOR_CLI" "$@"
