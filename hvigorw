@@ -51,22 +51,32 @@ echo "[hvigorw] Using hvigor at: $HVIGOR_CLI"
 # Set NODE_PATH so that hvigorfile.ts imports resolve from hvigor/node_modules
 export NODE_PATH="$HVIGOR_DIR/node_modules:${NODE_PATH:-}"
 
-# In CI, skip SDK license check (Huawei's license server is not reachable, and the
-# OpenHarmony SDK is Apache-2.0 licensed). Patch _checkLicense to be a no-op.
+# In CI, skip SDK license check and component download. Huawei's servers are
+# not reachable from GitHub Actions, and the OpenHarmony SDK is already installed
+# via openharmony-rs/setup-ohos-sdk. Patch the entire checkAndInstallComponents
+# flow to return the locally-available components without network calls.
 if [ "${CI:-}" = "true" ]; then
   HANDLER_JS="$HVIGOR_DIR/node_modules/@ohos/hvigor-ohos-plugin/node_modules/@ohos/sdkmanager-common/build/src/core/api/common-sdk-info-handler.js"
   if [ -f "$HANDLER_JS" ]; then
-    # Replace _checkLicense method body to return immediately (skip license validation)
     node -e "
       const fs = require('fs');
       let code = fs.readFileSync('$HANDLER_JS', 'utf8');
-      // Replace the _checkLicense method to resolve immediately
+
+      // Patch _checkLicense to be a no-op (skip license validation)
       code = code.replace(
         /(_checkLicense\s*\(componentsToBeInstalled\)\s*\{)/,
-        '_checkLicense(componentsToBeInstalled){return __awaiter(this,void 0,void 0,function*(){return;});}_checkLicense_original(componentsToBeInstalled){'
+        '_checkLicense(c){return __awaiter(this,void 0,void 0,function*(){return;});}_checkLicense_orig(componentsToBeInstalled){'
       );
+
+      // Patch _installComponents to be a no-op (skip downloading from Huawei CDN)
+      code = code.replace(
+        /(_installComponents\s*\(componentsToBeInstalled\s*,\s*progress\)\s*\{)/,
+        '_installComponents(c,p){return __awaiter(this,void 0,void 0,function*(){return;});}_installComponents_orig(componentsToBeInstalled,progress){'
+      );
+
       fs.writeFileSync('$HANDLER_JS', code);
-    " && echo "[hvigorw] Patched SDK license check for CI" || echo "[hvigorw] WARN: Could not patch license check"
+      console.log('[hvigorw] Patched SDK license check + component install for CI');
+    " || echo "[hvigorw] WARN: Could not patch SDK handler"
   fi
 fi
 
