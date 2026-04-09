@@ -51,4 +51,23 @@ echo "[hvigorw] Using hvigor at: $HVIGOR_CLI"
 # Set NODE_PATH so that hvigorfile.ts imports resolve from hvigor/node_modules
 export NODE_PATH="$HVIGOR_DIR/node_modules:${NODE_PATH:-}"
 
+# In CI, skip SDK license check (Huawei's license server is not reachable, and the
+# OpenHarmony SDK is Apache-2.0 licensed). Patch _checkLicense to be a no-op.
+if [ "${CI:-}" = "true" ]; then
+  HANDLER_JS="$HVIGOR_DIR/node_modules/@ohos/hvigor-ohos-plugin/node_modules/@ohos/sdkmanager-common/build/src/core/api/common-sdk-info-handler.js"
+  if [ -f "$HANDLER_JS" ]; then
+    # Replace _checkLicense method body to return immediately (skip license validation)
+    node -e "
+      const fs = require('fs');
+      let code = fs.readFileSync('$HANDLER_JS', 'utf8');
+      // Replace the _checkLicense method to resolve immediately
+      code = code.replace(
+        /(_checkLicense\s*\(componentsToBeInstalled\)\s*\{)/,
+        '_checkLicense(componentsToBeInstalled){return __awaiter(this,void 0,void 0,function*(){return;});}_checkLicense_original(componentsToBeInstalled){'
+      );
+      fs.writeFileSync('$HANDLER_JS', code);
+    " && echo "[hvigorw] Patched SDK license check for CI" || echo "[hvigorw] WARN: Could not patch license check"
+  fi
+fi
+
 node "$HVIGOR_CLI" "$@"
