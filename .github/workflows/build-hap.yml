@@ -119,6 +119,17 @@ jobs:
             [ -f "$CONFIGCHECK/$schema" ] || echo "$PERMISSIVE" > "$CONFIGCHECK/$schema"
           done
 
+          # Create device-define syscap files if missing
+          # hvigor reads ets/api/device-define/<deviceType>.json with {"SysCaps": [...]}
+          DEVICE_DEFINE="$SDK_RAW/ets/api/device-define"
+          mkdir -p "$DEVICE_DEFINE"
+          # Base system capabilities needed for a wearable app
+          SYSCAPS='{"SysCaps":["SystemCapability.ArkUI.ArkUI.Full","SystemCapability.Communication.NetStack","SystemCapability.Notification.Notification","SystemCapability.Security.AccessToken","SystemCapability.Ability.AbilityRuntime.Core","SystemCapability.Ability.AbilityRuntime.AbilityCore","SystemCapability.BundleManager.BundleFramework.Core","SystemCapability.Base","SystemCapability.Sensors.Sensor","SystemCapability.PowerManager.BatteryManager.Core","SystemCapability.Health.HealthStore"]}'
+          for device in default wearable phone tablet tv car; do
+            [ -f "$DEVICE_DEFINE/$device.json" ] || echo "$SYSCAPS" > "$DEVICE_DEFINE/$device.json"
+          done
+          echo "Created device-define syscap files"
+
           # Verify
           echo "::group::SDK structure"
           ls "$SDK_HOME/$API_VERSION/toolchains/modulecheck/" 2>/dev/null
