@@ -131,8 +131,15 @@ jobs:
           echo "Created device-define syscap files"
 
           # Ensure all SDK binaries are executable
-          find "$SDK_RAW" -type f \( -name "restool" -o -name "syscap_tool" -o -name "ark_*" -o -name "es2abc" -o -name "ts2abc" -o -name "abc2program" \) -exec chmod +x {} \;
+          find "$SDK_RAW/toolchains" -type f ! -name "*.json" ! -name "*.jar" ! -name "*.txt" ! -name "*.xml" ! -name "*.cfg" -exec chmod +x {} \; 2>/dev/null
+          find "$SDK_RAW/ets" -type f \( -name "es2abc" -o -name "ark_*" -o -name "ts2abc" \) -exec chmod +x {} \; 2>/dev/null
           echo "Set executable permissions on SDK tools"
+
+          # Debug: check restool exists and is the right format
+          echo "::group::restool check"
+          ls -la "$SDK_RAW/toolchains/restool"* 2>/dev/null || echo "restool not found"
+          file "$SDK_RAW/toolchains/restool" 2>/dev/null || echo "file command failed"
+          echo "::endgroup::"
 
           # Verify
           echo "::group::SDK structure"
