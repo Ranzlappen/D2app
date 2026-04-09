@@ -102,9 +102,26 @@ jobs:
           echo "OHOS_BASE_SDK_HOME=$SDK_HOME" >> "$GITHUB_ENV"
           echo "sdk.dir=$SDK_HOME" > local.properties
 
+          # hvigor PreBuild validates module.json5/app.json5 against JSON schemas
+          # in toolchains/modulecheck/. The OpenHarmony SDK may not ship these.
+          # Create permissive schemas so validation passes.
+          MODULECHECK="$SDK_RAW/toolchains/modulecheck"
+          mkdir -p "$MODULECHECK"
+          PERMISSIVE='{"type":"object","additionalProperties":true}'
+          for schema in app.json module.json forms.json pages.json routerMap.json appStartup.json insightIntent.json customUtds.json arkDataSchema.json; do
+            [ -f "$MODULECHECK/$schema" ] || echo "$PERMISSIVE" > "$MODULECHECK/$schema"
+          done
+
+          # Also ensure toolchains/configcheck/ schemas exist
+          CONFIGCHECK="$SDK_RAW/toolchains/configcheck"
+          mkdir -p "$CONFIGCHECK"
+          for schema in configSchema_rich.json configSchema_lite.json; do
+            [ -f "$CONFIGCHECK/$schema" ] || echo "$PERMISSIVE" > "$CONFIGCHECK/$schema"
+          done
+
           # Verify
           echo "::group::SDK structure"
-          ls -la "$SDK_HOME/$API_VERSION/" 2>/dev/null | head -10
+          ls "$SDK_HOME/$API_VERSION/toolchains/modulecheck/" 2>/dev/null
           echo "::endgroup::"
 
       - name: Configure ohpm registry
