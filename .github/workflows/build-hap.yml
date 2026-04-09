@@ -5,6 +5,11 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  OHOS_SDK_VERSION: "4.0"
+  OHPM_HOME: ${{ github.workspace }}/.ohpm
+  OHOS_SDK_HOME: ${{ github.workspace }}/.ohos_sdk
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,13 +27,45 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup HarmonyOS SDK
-        uses: harmonyos-dev/setup-harmonyos-sdk@v0.2.0
+      - name: Install ohpm
+        run: |
+          # Download and install ohpm (OpenHarmony Package Manager)
+          curl -fsSL https://repo.harmonyos.com/ohpm/ohpm-linux-x64.tar.gz -o ohpm.tar.gz
+          mkdir -p "$OHPM_HOME"
+          tar -xzf ohpm.tar.gz -C "$OHPM_HOME" --strip-components=1
+          rm ohpm.tar.gz
+          chmod +x "$OHPM_HOME/bin/ohpm"
+          echo "$OHPM_HOME/bin" >> "$GITHUB_PATH"
 
-      - name: Install dependencies
+          # Configure ohpm registry
+          "$OHPM_HOME/bin/ohpm" config set registry https://repo.harmonyos.com/ohpm/
+
+      - name: Download OpenHarmony SDK
+        run: |
+          # Download the OpenHarmony command-line tools
+          curl -fsSL https://repo.huaweicloud.com/openharmony/os/${OHOS_SDK_VERSION}/ohos-sdk-public.tar.gz -o sdk.tar.gz \
+            || curl -fsSL https://repo.huaweicloud.com/openharmony/os/4.0-Release/ohos-sdk-public.tar.gz -o sdk.tar.gz
+          mkdir -p "$OHOS_SDK_HOME"
+          tar -xzf sdk.tar.gz -C "$OHOS_SDK_HOME"
+          rm sdk.tar.gz
+
+          # Unzip individual SDK components (ets, toolchains, previewer, etc.)
+          for zip_file in "$OHOS_SDK_HOME"/ohos-sdk/linux/*.zip; do
+            if [ -f "$zip_file" ]; then
+              unzip -qo "$zip_file" -d "$OHOS_SDK_HOME"
+            fi
+          done
+
+          # Set SDK path for hvigor
+          echo "OHOS_BASE_SDK_HOME=$OHOS_SDK_HOME" >> "$GITHUB_ENV"
+
+      - name: Configure npm registries
         run: |
           npm config set registry https://repo.huaweicloud.com/repository/npm/
           npm config set @ohos:registry https://repo.harmonyos.com/npm/
+
+      - name: Install dependencies
+        run: |
           ohpm install --all
 
       - name: Build HAP (debug)
