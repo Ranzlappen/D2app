@@ -168,10 +168,17 @@ jobs:
           chmod +x ./hvigorw
           ./hvigorw assembleHap -p buildMode=debug --no-daemon
 
+      - name: Find and upload HAP artifact
+        if: always()
+        run: |
+          echo "::group::Searching for .hap files"
+          find . -name "*.hap" -type f 2>/dev/null
+          echo "::endgroup::"
+
       - name: Upload HAP artifact
         uses: actions/upload-artifact@v4
         with:
           name: d2-prototype-hap
           path: |
-            **/build/*.hap
-            **/outputs/*.hap
+            **/*.hap
+          if-no-files-found: warn
