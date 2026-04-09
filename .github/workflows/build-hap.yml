@@ -2,12 +2,8 @@ name: Build D2 Prototype HAP
 
 on:
   push:
-    branches: [ main ]
+    branches: [ '**' ]          # works on ANY branch (including yours)
   workflow_dispatch:
-
-env:
-  COMMANDLINE_TOOLS_VERSION: "5.0.5.310"
-  COMMANDLINE_TOOLS_REPO: "fcitx-contrib/ohpm-cli-tools"
 
 jobs:
   build:
@@ -26,152 +22,27 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Cache HarmonyOS command-line tools
-        id: cache-cli-tools
-        uses: actions/cache@v4
-        with:
-          path: ~/commandline-tools
-          key: harmonyos-cli-${{ env.COMMANDLINE_TOOLS_VERSION }}-linux-x64
+      - name: Setup HarmonyOS SDK
+        uses: harmonyos-dev/setup-harmonyos-sdk@v0.2.0
 
-      - name: Download HarmonyOS command-line tools
-        if: steps.cache-cli-tools.outputs.cache-hit != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          ARCHIVE_PREFIX="commandline-tools-linux-x64-${COMMANDLINE_TOOLS_VERSION}.zip"
-
-          # Download split zip parts from the community mirror
-          gh release download "${COMMANDLINE_TOOLS_VERSION}" \
-            --repo "${COMMANDLINE_TOOLS_REPO}" \
-            --pattern "${ARCHIVE_PREFIX}.*" \
-            --dir /tmp/cli-parts
-
-          # Reassemble split archive
-          cat /tmp/cli-parts/${ARCHIVE_PREFIX}.* > /tmp/commandline-tools.zip
-          rm -rf /tmp/cli-parts
-
-          # Extract
-          mkdir -p ~/commandline-tools
-          unzip -qo /tmp/commandline-tools.zip -d ~/commandline-tools
-          rm /tmp/commandline-tools.zip
-
-      - name: Setup OpenHarmony SDK
-        id: ohos-sdk
-        uses: openharmony-rs/setup-ohos-sdk@v1
-        with:
-          version: "5.0.0"
-
-      - name: Setup tool paths
-        run: |
-          # Find and add ohpm to PATH
-          OHPM_BIN=$(find ~/commandline-tools -type f -name "ohpm" -path "*/bin/*" | head -1)
-          if [ -n "$OHPM_BIN" ]; then
-            echo "$(dirname "$OHPM_BIN")" >> "$GITHUB_PATH"
-            echo "Found ohpm at: $OHPM_BIN"
-          else
-            echo "::error::ohpm binary not found in command-line tools"
-            find ~/commandline-tools -type f -name "ohpm" || true
-            exit 1
-          fi
-
-          # Find and add hvigor to PATH (if bundled)
-          HVIGOR_BIN=$(find ~/commandline-tools -type f -name "hvigorw" -path "*/bin/*" | head -1)
-          if [ -n "$HVIGOR_BIN" ]; then
-            echo "$(dirname "$HVIGOR_BIN")" >> "$GITHUB_PATH"
-          fi
-
-          # List what we got
-          echo "::group::Installed command-line tools"
-          ls -la ~/commandline-tools/
-          echo "::endgroup::"
-
-      - name: Configure SDK paths
-        run: |
-          SDK_RAW="${{ steps.ohos-sdk.outputs.ohos-base-sdk-home }}"
-          API_VERSION="${{ steps.ohos-sdk.outputs.api-version }}"
-          echo "SDK base path: $SDK_RAW"
-          echo "API version: $API_VERSION"
-
-          # hvigor resolves SDK at: $OHOS_BASE_SDK_HOME/<api>/ets/...
-          # SDK components are flat at $SDK_RAW/ets/, $SDK_RAW/js/, etc.
-          # Symlink $SDK_RAW as the <api> directory directly under SDK_HOME.
-          SDK_HOME="$HOME/ohos-sdk-home"
-          mkdir -p "$SDK_HOME"
-          ln -sfn "$SDK_RAW" "$SDK_HOME/$API_VERSION"
-
-          echo "OHOS_BASE_SDK_HOME=$SDK_HOME" >> "$GITHUB_ENV"
-          echo "sdk.dir=$SDK_HOME" > local.properties
-
-          # hvigor PreBuild validates module.json5/app.json5 against JSON schemas
-          # in toolchains/modulecheck/. The OpenHarmony SDK may not ship these.
-          # Create permissive schemas so validation passes.
-          MODULECHECK="$SDK_RAW/toolchains/modulecheck"
-          mkdir -p "$MODULECHECK"
-          PERMISSIVE='{"type":"object","additionalProperties":true}'
-          for schema in app.json module.json forms.json pages.json routerMap.json appStartup.json insightIntent.json customUtds.json arkDataSchema.json; do
-            [ -f "$MODULECHECK/$schema" ] || echo "$PERMISSIVE" > "$MODULECHECK/$schema"
-          done
-
-          # Also ensure toolchains/configcheck/ schemas exist
-          CONFIGCHECK="$SDK_RAW/toolchains/configcheck"
-          mkdir -p "$CONFIGCHECK"
-          for schema in configSchema_rich.json configSchema_lite.json; do
-            [ -f "$CONFIGCHECK/$schema" ] || echo "$PERMISSIVE" > "$CONFIGCHECK/$schema"
-          done
-
-          # Create device-define syscap files if missing
-          # hvigor reads ets/api/device-define/<deviceType>.json with {"SysCaps": [...]}
-          DEVICE_DEFINE="$SDK_RAW/ets/api/device-define"
-          mkdir -p "$DEVICE_DEFINE"
-          # Base system capabilities needed for a wearable app
-          SYSCAPS='{"SysCaps":["SystemCapability.ArkUI.ArkUI.Full","SystemCapability.Communication.NetStack","SystemCapability.Notification.Notification","SystemCapability.Security.AccessToken","SystemCapability.Ability.AbilityRuntime.Core","SystemCapability.Ability.AbilityRuntime.AbilityCore","SystemCapability.BundleManager.BundleFramework.Core","SystemCapability.Base","SystemCapability.Sensors.Sensor","SystemCapability.PowerManager.BatteryManager.Core","SystemCapability.Health.HealthStore"]}'
-          for device in default wearable phone tablet tv car; do
-            [ -f "$DEVICE_DEFINE/$device.json" ] || echo "$SYSCAPS" > "$DEVICE_DEFINE/$device.json"
-          done
-          echo "Created device-define syscap files"
-
-          # Ensure all SDK binaries are executable
-          find "$SDK_RAW/toolchains" -type f ! -name "*.json" ! -name "*.jar" ! -name "*.txt" ! -name "*.xml" ! -name "*.cfg" -exec chmod +x {} \; 2>/dev/null
-          find "$SDK_RAW/ets" -type f \( -name "es2abc" -o -name "ark_*" -o -name "ts2abc" \) -exec chmod +x {} \; 2>/dev/null
-          echo "Set executable permissions on SDK tools"
-
-          # Debug: check restool and full toolchains contents
-          echo "::group::toolchains contents"
-          ls -laR "$SDK_RAW/toolchains/" 2>/dev/null | head -60
-          echo "---"
-          find "$SDK_RAW/toolchains" -name "restool*" 2>/dev/null
-          echo "---"
-          find "$SDK_RAW" -name "restool*" 2>/dev/null
-          echo "::endgroup::"
-
-          # Verify
-          echo "::group::SDK structure"
-          ls "$SDK_HOME/$API_VERSION/toolchains/modulecheck/" 2>/dev/null
-          echo "::endgroup::"
-
-      - name: Configure ohpm registry
-        run: |
-          ohpm config set registry https://repo.harmonyos.com/ohpm/
-          ohpm -v
-
-      - name: Configure npm registries
+      - name: Install dependencies
         run: |
           npm config set registry https://repo.huaweicloud.com/repository/npm/
           npm config set @ohos:registry https://repo.harmonyos.com/npm/
-
-      - name: Install ohpm dependencies
-        run: |
-          ohpm install --all || echo "::warning::ohpm install had issues (may be OK if no ohpm deps)"
+          ohpm install --all
 
       - name: Build HAP (debug)
         run: |
           chmod +x ./hvigorw
+          ./hvigorw clean
           ./hvigorw assembleHap -p buildMode=debug --no-daemon
+
+      # NEW: Debug step – shows exactly where the .hap is created
+      - name: Locate HAP file
+        run: find . -name "*.hap" -type f | head -10
 
       - name: Upload HAP artifact
         uses: actions/upload-artifact@v4
         with:
           name: d2-prototype-hap
-          path: |
-            **/build/*.hap
-            **/outputs/*.hap
+          path: '**/*.hap'        # catches ANY .hap anywhere
