@@ -1,0 +1,10 @@
+/node_modules
+/oh_modules
+/build
+/entry/build
+/.idea
+*.log
+*.hap
+*.app
+local.properties
+oh-package-lock.json5

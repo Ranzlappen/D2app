@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "D2 Prototype entry module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "D2 Prototype main ability"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "D2 Prototype"
+    }
+  ]
+}
