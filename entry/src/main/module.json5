@@ -38,7 +38,12 @@
         "name": "ohos.permission.ACCELEROMETER"
       },
       {
-        "name": "ohos.permission.READ_HEALTH_DATA"
+        "name": "ohos.permission.READ_HEALTH_DATA",
+        "reason": "$string:health_data_reason",
+        "usedScene": {
+          "abilities": ["EntryAbility"],
+          "when": "inuse"
+        }
       }
     ]
   }

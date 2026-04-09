@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "D2 Prototype"
+    },
+    {
+      "name": "health_data_reason",
+      "value": "Used to display your real-time heart rate on the watch face."
     }
   ]
 }
