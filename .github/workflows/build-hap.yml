@@ -23,7 +23,7 @@ jobs:
           node-version: '20'
 
       - name: Setup HarmonyOS SDK
-        uses: harmonyos-dev/setup-harmonyos-sdk@v0.2.0
+        uses: harmonyos-dev/setup-harmonyos-sdk@0.2.0   # ← fixed (no 'v')
 
       - name: Install dependencies
         run: |
@@ -37,7 +37,7 @@ jobs:
           ./hvigorw clean
           ./hvigorw assembleHap -p buildMode=debug --no-daemon
 
-      # NEW: Debug step – shows exactly where the .hap is created
+      # Shows exactly where the .hap file was created
       - name: Locate HAP file
         run: find . -name "*.hap" -type f | head -10
 
@@ -45,4 +45,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: d2-prototype-hap
-          path: '**/*.hap'        # catches ANY .hap anywhere
+          path: '**/*.hap'        # catches the file no matter where it is
