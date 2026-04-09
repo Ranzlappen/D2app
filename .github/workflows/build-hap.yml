@@ -130,6 +130,10 @@ jobs:
           done
           echo "Created device-define syscap files"
 
+          # Ensure all SDK binaries are executable
+          find "$SDK_RAW" -type f \( -name "restool" -o -name "syscap_tool" -o -name "ark_*" -o -name "es2abc" -o -name "ts2abc" -o -name "abc2program" \) -exec chmod +x {} \;
+          echo "Set executable permissions on SDK tools"
+
           # Verify
           echo "::group::SDK structure"
           ls "$SDK_HOME/$API_VERSION/toolchains/modulecheck/" 2>/dev/null
