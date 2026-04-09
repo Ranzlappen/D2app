@@ -60,6 +60,7 @@ jobs:
         uses: openharmony-rs/setup-ohos-sdk@v1
         with:
           version: "5.0.0"
+          fixup-path: true
 
       - name: Setup tool paths
         run: |
@@ -87,20 +88,29 @@ jobs:
 
       - name: Configure SDK paths
         run: |
-          # The SDK path from openharmony-rs/setup-ohos-sdk
-          SDK_HOME="${{ steps.ohos-sdk.outputs.sdk-path }}"
-          echo "SDK path: $SDK_HOME"
+          SDK_RAW="${{ steps.ohos-sdk.outputs.sdk-path }}"
+          API_VERSION="${{ steps.ohos-sdk.outputs.api-version }}"
+          echo "SDK raw path: $SDK_RAW"
+          echo "API version: $API_VERSION"
+
+          # hvigor expects: $HOS_SDK_HOME/openharmony/<api>/ets/...
+          # The setup-ohos-sdk action with fixup-path puts components under <api>/ dirs.
+          # We need to wrap that under an "openharmony" parent directory.
+          HOS_HOME="$HOME/hos-sdk-home"
+          mkdir -p "$HOS_HOME/openharmony"
+          ln -sfn "$SDK_RAW" "$HOS_HOME/openharmony/$API_VERSION"
 
           # Set HOS_SDK_HOME (what hvigor looks for)
-          echo "HOS_SDK_HOME=$SDK_HOME" >> "$GITHUB_ENV"
+          echo "HOS_SDK_HOME=$HOS_HOME" >> "$GITHUB_ENV"
 
           # Also create local.properties with hwsdk.dir as fallback
-          echo "hwsdk.dir=$SDK_HOME" > local.properties
-          cat local.properties
+          echo "hwsdk.dir=$HOS_HOME" > local.properties
 
-          # Show SDK contents for debugging
-          echo "::group::SDK contents"
-          ls -la "$SDK_HOME/" 2>/dev/null || echo "SDK dir not found"
+          # Debug: show the final structure
+          echo "::group::SDK structure"
+          echo "HOS_SDK_HOME=$HOS_HOME"
+          ls -la "$HOS_HOME/openharmony/"
+          ls -la "$HOS_HOME/openharmony/$API_VERSION/" 2>/dev/null || echo "(empty or symlink target missing)"
           echo "::endgroup::"
 
       - name: Configure ohpm registry
