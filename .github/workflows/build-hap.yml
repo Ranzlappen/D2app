@@ -55,6 +55,12 @@ jobs:
           unzip -qo /tmp/commandline-tools.zip -d ~/commandline-tools
           rm /tmp/commandline-tools.zip
 
+      - name: Setup OpenHarmony SDK
+        id: ohos-sdk
+        uses: openharmony-rs/setup-ohos-sdk@v1
+        with:
+          version: "5.0.0"
+
       - name: Setup tool paths
         run: |
           # Find and add ohpm to PATH
@@ -74,15 +80,27 @@ jobs:
             echo "$(dirname "$HVIGOR_BIN")" >> "$GITHUB_PATH"
           fi
 
-          # Set SDK home if an SDK is bundled with the tools
-          SDK_DIR=$(find ~/commandline-tools -type d -name "openharmony" -o -type d -name "HarmonyOS-NEXT" | head -1)
-          if [ -n "$SDK_DIR" ]; then
-            echo "OHOS_BASE_SDK_HOME=$SDK_DIR" >> "$GITHUB_ENV"
-          fi
-
           # List what we got
-          echo "::group::Installed tools"
+          echo "::group::Installed command-line tools"
           ls -la ~/commandline-tools/
+          echo "::endgroup::"
+
+      - name: Configure SDK paths
+        run: |
+          # The SDK path from openharmony-rs/setup-ohos-sdk
+          SDK_HOME="${{ steps.ohos-sdk.outputs.sdk-path }}"
+          echo "SDK path: $SDK_HOME"
+
+          # Set HOS_SDK_HOME (what hvigor looks for)
+          echo "HOS_SDK_HOME=$SDK_HOME" >> "$GITHUB_ENV"
+
+          # Also create local.properties with hwsdk.dir as fallback
+          echo "hwsdk.dir=$SDK_HOME" > local.properties
+          cat local.properties
+
+          # Show SDK contents for debugging
+          echo "::group::SDK contents"
+          ls -la "$SDK_HOME/" 2>/dev/null || echo "SDK dir not found"
           echo "::endgroup::"
 
       - name: Configure ohpm registry
