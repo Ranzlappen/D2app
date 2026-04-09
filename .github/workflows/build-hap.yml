@@ -135,14 +135,13 @@ jobs:
           find "$SDK_RAW/ets" -type f \( -name "es2abc" -o -name "ark_*" -o -name "ts2abc" \) -exec chmod +x {} \; 2>/dev/null
           echo "Set executable permissions on SDK tools"
 
-          # Debug: check restool exists and is the right format
-          echo "::group::restool check"
-          RESTOOL="$SDK_RAW/toolchains/restool"
-          ls -la "$RESTOOL" 2>/dev/null || echo "restool not found at $RESTOOL"
-          file "$RESTOOL" 2>/dev/null || echo "file command failed"
-          ldd "$RESTOOL" 2>/dev/null || echo "ldd failed (may be static or wrong arch)"
-          # Try running it to see the actual error
-          "$RESTOOL" --version 2>&1 || echo "restool execution failed with exit code $?"
+          # Debug: check restool and full toolchains contents
+          echo "::group::toolchains contents"
+          ls -laR "$SDK_RAW/toolchains/" 2>/dev/null | head -60
+          echo "---"
+          find "$SDK_RAW/toolchains" -name "restool*" 2>/dev/null
+          echo "---"
+          find "$SDK_RAW" -name "restool*" 2>/dev/null
           echo "::endgroup::"
 
           # Verify
