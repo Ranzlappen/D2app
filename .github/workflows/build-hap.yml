@@ -92,18 +92,19 @@ jobs:
           echo "SDK raw path: $SDK_RAW"
           echo "API version: $API_VERSION"
 
-          # hvigor (OpenHarmony mode) expects: $OHOS_BASE_SDK_HOME/openharmony/<api>/ets/...
+          # hvigor resolves SDK at: $OHOS_BASE_SDK_HOME/<api>/ets/...
           # SDK components are flat at $SDK_RAW/ets/, $SDK_RAW/js/, etc.
+          # Symlink $SDK_RAW as the <api> directory directly under SDK_HOME.
           SDK_HOME="$HOME/ohos-sdk-home"
-          mkdir -p "$SDK_HOME/openharmony"
-          ln -sfn "$SDK_RAW" "$SDK_HOME/openharmony/$API_VERSION"
+          mkdir -p "$SDK_HOME"
+          ln -sfn "$SDK_RAW" "$SDK_HOME/$API_VERSION"
 
           echo "OHOS_BASE_SDK_HOME=$SDK_HOME" >> "$GITHUB_ENV"
           echo "sdk.dir=$SDK_HOME" > local.properties
 
           # Verify
           echo "::group::SDK structure"
-          ls -la "$SDK_HOME/openharmony/$API_VERSION/" 2>/dev/null | head -10
+          ls -la "$SDK_HOME/$API_VERSION/" 2>/dev/null | head -10
           echo "::endgroup::"
 
       - name: Configure ohpm registry
