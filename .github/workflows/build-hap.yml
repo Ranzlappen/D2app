@@ -60,7 +60,6 @@ jobs:
         uses: openharmony-rs/setup-ohos-sdk@v1
         with:
           version: "5.0.0"
-          fixup-path: true
 
       - name: Setup tool paths
         run: |
@@ -93,9 +92,9 @@ jobs:
           echo "SDK raw path: $SDK_RAW"
           echo "API version: $API_VERSION"
 
+          # Without fixup-path, SDK components are flat: $SDK_RAW/ets/, $SDK_RAW/js/, etc.
           # hvigor expects: $HOS_SDK_HOME/openharmony/<api>/ets/...
-          # The setup-ohos-sdk action with fixup-path puts components under <api>/ dirs.
-          # We need to wrap that under an "openharmony" parent directory.
+          # So symlink $SDK_RAW as the <api> directory inside openharmony/
           HOS_HOME="$HOME/hos-sdk-home"
           mkdir -p "$HOS_HOME/openharmony"
           ln -sfn "$SDK_RAW" "$HOS_HOME/openharmony/$API_VERSION"
@@ -106,11 +105,15 @@ jobs:
           # Also create local.properties with hwsdk.dir as fallback
           echo "hwsdk.dir=$HOS_HOME" > local.properties
 
-          # Debug: show the final structure
-          echo "::group::SDK structure"
+          # Debug: verify the structure is correct
+          echo "::group::SDK structure verification"
           echo "HOS_SDK_HOME=$HOS_HOME"
+          echo "Expected: $HOS_HOME/openharmony/$API_VERSION/ets/"
           ls -la "$HOS_HOME/openharmony/"
-          ls -la "$HOS_HOME/openharmony/$API_VERSION/" 2>/dev/null || echo "(empty or symlink target missing)"
+          ls -la "$HOS_HOME/openharmony/$API_VERSION/" 2>/dev/null || echo "ERROR: symlink target missing"
+          test -d "$HOS_HOME/openharmony/$API_VERSION/ets" && echo "OK: ets/ found" || echo "WARN: ets/ not found"
+          test -d "$HOS_HOME/openharmony/$API_VERSION/js" && echo "OK: js/ found" || echo "WARN: js/ not found"
+          test -d "$HOS_HOME/openharmony/$API_VERSION/toolchains" && echo "OK: toolchains/ found" || echo "WARN: toolchains/ not found"
           echo "::endgroup::"
 
       - name: Configure ohpm registry
