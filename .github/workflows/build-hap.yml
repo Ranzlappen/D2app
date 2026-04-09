@@ -87,9 +87,9 @@ jobs:
 
       - name: Configure SDK paths
         run: |
-          SDK_RAW="${{ steps.ohos-sdk.outputs.sdk-path }}"
+          SDK_RAW="${{ steps.ohos-sdk.outputs.ohos-base-sdk-home }}"
           API_VERSION="${{ steps.ohos-sdk.outputs.api-version }}"
-          echo "SDK raw path: $SDK_RAW"
+          echo "SDK base path: $SDK_RAW"
           echo "API version: $API_VERSION"
 
           # hvigor resolves SDK at: $OHOS_BASE_SDK_HOME/<api>/ets/...
