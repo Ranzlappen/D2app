@@ -1,0 +1,50 @@
+#!/bin/bash
+# hvigorw – HarmonyOS build tool wrapper
+# Bootstraps hvigor from hvigor/hvigor-config.json5 and runs the build.
+
+set -e
+
+HVIGOR_DIR="$(cd "$(dirname "$0")/hvigor" && pwd)"
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Check if node_modules exists in hvigor dir; if not, install
+if [ ! -d "$HVIGOR_DIR/node_modules" ]; then
+  echo "[hvigorw] Installing hvigor dependencies..."
+
+  # Generate a package.json from hvigor-config.json5
+  node -e "
+    const fs = require('fs');
+    const raw = fs.readFileSync('$HVIGOR_DIR/hvigor-config.json5', 'utf8');
+    // Strip json5 comments
+    const cleaned = raw.replace(/\/\/.*$/gm, '').replace(/,\s*([\]}])/g, '\$1');
+    const config = JSON.parse(cleaned);
+    const pkg = {
+      name: 'hvigor-wrapper',
+      version: '1.0.0',
+      dependencies: config.dependencies || {}
+    };
+    fs.writeFileSync('$HVIGOR_DIR/package.json', JSON.stringify(pkg, null, 2));
+  "
+
+  # Configure npm to use Huawei registry for @ohos scoped packages
+  cd "$HVIGOR_DIR"
+  npm config set @ohos:registry https://repo.harmonyos.com/npm/
+  npm install --legacy-peer-deps 2>&1
+  cd "$PROJECT_DIR"
+fi
+
+# Find the hvigor CLI entry point
+HVIGOR_CLI=""
+if [ -f "$HVIGOR_DIR/node_modules/@ohos/hvigor/bin/hvigor.js" ]; then
+  HVIGOR_CLI="$HVIGOR_DIR/node_modules/@ohos/hvigor/bin/hvigor.js"
+elif [ -f "$HVIGOR_DIR/node_modules/.bin/hvigor" ]; then
+  HVIGOR_CLI="$HVIGOR_DIR/node_modules/.bin/hvigor"
+else
+  echo "[hvigorw] ERROR: Could not find hvigor after install."
+  echo "[hvigorw] Contents of $HVIGOR_DIR/node_modules/@ohos/:"
+  ls -la "$HVIGOR_DIR/node_modules/@ohos/" 2>/dev/null || echo "  (not found)"
+  exit 1
+fi
+
+echo "[hvigorw] Using hvigor at: $HVIGOR_CLI"
+node "$HVIGOR_CLI" "$@"

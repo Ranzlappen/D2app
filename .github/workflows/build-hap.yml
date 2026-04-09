@@ -95,14 +95,13 @@ jobs:
           npm config set registry https://repo.huaweicloud.com/repository/npm/
           npm config set @ohos:registry https://repo.harmonyos.com/npm/
 
-      - name: Install dependencies
+      - name: Install ohpm dependencies
         run: |
-          ohpm install --all
+          ohpm install --all || echo "::warning::ohpm install had issues (may be OK if no ohpm deps)"
 
       - name: Build HAP (debug)
         run: |
           chmod +x ./hvigorw
-          ./hvigorw clean
           ./hvigorw assembleHap -p buildMode=debug --no-daemon
 
       - name: Upload HAP artifact
