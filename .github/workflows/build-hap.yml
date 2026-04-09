@@ -85,7 +85,7 @@ jobs:
           ls -la ~/commandline-tools/
           echo "::endgroup::"
 
-      - name: Configure SDK paths
+      - name: Configure SDK paths and accept licenses
         run: |
           SDK_RAW="${{ steps.ohos-sdk.outputs.sdk-path }}"
           API_VERSION="${{ steps.ohos-sdk.outputs.api-version }}"
@@ -105,15 +105,44 @@ jobs:
           # Also create local.properties with sdk.dir as fallback
           echo "sdk.dir=$SDK_HOME" > local.properties
 
+          # Accept SDK licenses:
+          # hvigor checks for $SDK_HOME/openharmony/licenses/<licenseId>.sha256
+          # Each SDK component's oh-uni-package.json has a "license" field.
+          # We read it, hash the license text from the component, and write the marker.
+          LICENSES_DIR="$SDK_HOME/openharmony/licenses"
+          mkdir -p "$LICENSES_DIR"
+
+          for pkg_file in "$SDK_RAW"/*/oh-uni-package.json; do
+            if [ -f "$pkg_file" ]; then
+              LICENSE_ID=$(node -e "const p=require('$pkg_file'); console.log(p.license || p.licenseName || '')" 2>/dev/null)
+              if [ -n "$LICENSE_ID" ]; then
+                COMPONENT_DIR=$(dirname "$pkg_file")
+                # Look for a license file in the component directory
+                LICENSE_FILE=""
+                for lf in "$COMPONENT_DIR/LICENSE" "$COMPONENT_DIR/license" "$COMPONENT_DIR/LICENSE.txt" "$COMPONENT_DIR/NOTICE"; do
+                  if [ -f "$lf" ]; then
+                    LICENSE_FILE="$lf"
+                    break
+                  fi
+                done
+                if [ -n "$LICENSE_FILE" ]; then
+                  HASH=$(sha256sum "$LICENSE_FILE" | cut -d' ' -f1)
+                else
+                  # Use the license ID itself as content fallback
+                  HASH=$(echo -n "$LICENSE_ID" | sha256sum | cut -d' ' -f1)
+                fi
+                echo "$HASH" > "$LICENSES_DIR/${LICENSE_ID}.sha256"
+                echo "Accepted license: $LICENSE_ID (hash: ${HASH:0:16}...)"
+              fi
+            fi
+          done
+
           # Debug: verify the structure is correct
           echo "::group::SDK structure verification"
           echo "OHOS_BASE_SDK_HOME=$SDK_HOME"
-          echo "Expected: $SDK_HOME/openharmony/$API_VERSION/ets/"
           ls -la "$SDK_HOME/openharmony/"
           ls -la "$SDK_HOME/openharmony/$API_VERSION/" 2>/dev/null || echo "ERROR: symlink target missing"
-          test -d "$SDK_HOME/openharmony/$API_VERSION/ets" && echo "OK: ets/ found" || echo "WARN: ets/ not found"
-          test -d "$SDK_HOME/openharmony/$API_VERSION/js" && echo "OK: js/ found" || echo "WARN: js/ not found"
-          test -d "$SDK_HOME/openharmony/$API_VERSION/toolchains" && echo "OK: toolchains/ found" || echo "WARN: toolchains/ not found"
+          ls -la "$LICENSES_DIR/" 2>/dev/null || echo "No licenses dir"
           echo "::endgroup::"
 
       - name: Configure ohpm registry
