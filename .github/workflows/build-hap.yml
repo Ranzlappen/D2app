@@ -93,27 +93,27 @@ jobs:
           echo "API version: $API_VERSION"
 
           # Without fixup-path, SDK components are flat: $SDK_RAW/ets/, $SDK_RAW/js/, etc.
-          # hvigor expects: $HOS_SDK_HOME/openharmony/<api>/ets/...
-          # So symlink $SDK_RAW as the <api> directory inside openharmony/
-          HOS_HOME="$HOME/hos-sdk-home"
-          mkdir -p "$HOS_HOME/openharmony"
-          ln -sfn "$SDK_RAW" "$HOS_HOME/openharmony/$API_VERSION"
+          # hvigor (OpenHarmony mode) checks OHOS_BASE_SDK_HOME for sdk.dir
+          # It expects: $OHOS_BASE_SDK_HOME/openharmony/<api>/ets/...
+          SDK_HOME="$HOME/ohos-sdk-home"
+          mkdir -p "$SDK_HOME/openharmony"
+          ln -sfn "$SDK_RAW" "$SDK_HOME/openharmony/$API_VERSION"
 
-          # Set HOS_SDK_HOME (what hvigor looks for)
-          echo "HOS_SDK_HOME=$HOS_HOME" >> "$GITHUB_ENV"
+          # Set OHOS_BASE_SDK_HOME (what hvigor checks for OpenHarmony runtimeOS)
+          echo "OHOS_BASE_SDK_HOME=$SDK_HOME" >> "$GITHUB_ENV"
 
-          # Also create local.properties with hwsdk.dir as fallback
-          echo "hwsdk.dir=$HOS_HOME" > local.properties
+          # Also create local.properties with sdk.dir as fallback
+          echo "sdk.dir=$SDK_HOME" > local.properties
 
           # Debug: verify the structure is correct
           echo "::group::SDK structure verification"
-          echo "HOS_SDK_HOME=$HOS_HOME"
-          echo "Expected: $HOS_HOME/openharmony/$API_VERSION/ets/"
-          ls -la "$HOS_HOME/openharmony/"
-          ls -la "$HOS_HOME/openharmony/$API_VERSION/" 2>/dev/null || echo "ERROR: symlink target missing"
-          test -d "$HOS_HOME/openharmony/$API_VERSION/ets" && echo "OK: ets/ found" || echo "WARN: ets/ not found"
-          test -d "$HOS_HOME/openharmony/$API_VERSION/js" && echo "OK: js/ found" || echo "WARN: js/ not found"
-          test -d "$HOS_HOME/openharmony/$API_VERSION/toolchains" && echo "OK: toolchains/ found" || echo "WARN: toolchains/ not found"
+          echo "OHOS_BASE_SDK_HOME=$SDK_HOME"
+          echo "Expected: $SDK_HOME/openharmony/$API_VERSION/ets/"
+          ls -la "$SDK_HOME/openharmony/"
+          ls -la "$SDK_HOME/openharmony/$API_VERSION/" 2>/dev/null || echo "ERROR: symlink target missing"
+          test -d "$SDK_HOME/openharmony/$API_VERSION/ets" && echo "OK: ets/ found" || echo "WARN: ets/ not found"
+          test -d "$SDK_HOME/openharmony/$API_VERSION/js" && echo "OK: js/ found" || echo "WARN: js/ not found"
+          test -d "$SDK_HOME/openharmony/$API_VERSION/toolchains" && echo "OK: toolchains/ found" || echo "WARN: toolchains/ not found"
           echo "::endgroup::"
 
       - name: Configure ohpm registry
