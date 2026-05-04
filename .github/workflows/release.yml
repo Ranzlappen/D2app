@@ -1,0 +1,70 @@
+name: Release D2 Prototype
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG"
+
+      - name: Download latest HAP artifact
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          name: d2-prototype-hap
+          workflow: build-hap.yml
+          branch: main
+          path: ./artifacts
+        continue-on-error: true
+
+      - name: Build HAP if no artifact found
+        if: steps.download.outcome == 'failure'
+        run: echo "::warning::No pre-built artifact found. Trigger a build on main first."
+
+      - name: Find HAP files
+        id: find-hap
+        run: |
+          HAP_FILES=$(find ./artifacts -name "*.hap" 2>/dev/null | head -5)
+          if [ -z "$HAP_FILES" ]; then
+            echo "No .hap files found in artifacts"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Found HAP files:"
+            echo "$HAP_FILES"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "files<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$HAP_FILES" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: D2 Prototype ${{ steps.version.outputs.tag }}
+          body: |
+            ## D2 Prototype ${{ steps.version.outputs.tag }}
+
+            ### Install on Huawei Watch D2
+            1. Download the `.hap` file below
+            2. Transfer to your phone and install via **HUAWEI DevEco Assistant**
+            3. Or install via HDC: `hdc install <filename>.hap`
+
+            See [README](../blob/main/README.md) for full setup instructions.
+          files: ./artifacts/**/*.hap
+          fail_on_unmatched_files: false
+          draft: false
+          prerelease: false
