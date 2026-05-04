@@ -1,62 +1,180 @@
 name: Release D2 Prototype
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. 1.0.0, 1.1.0-beta)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release?'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  build-and-release:
     runs-on: ubuntu-latest
+    env:
+      COMMANDLINE_TOOLS_VERSION: "5.0.5.310"
+      COMMANDLINE_TOOLS_REPO: "fcitx-contrib/ohpm-cli-tools"
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract version from tag
-        id: version
+      - name: Validate version input
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Releasing $TAG"
+          VERSION="${{ inputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format '$VERSION'. Use semver like 1.0.0 or 1.1.0-beta"
+            exit 1
+          fi
+          TAG="v${VERSION}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "Preparing release $TAG"
 
-      - name: Download latest HAP artifact
-        uses: dawidd6/action-download-artifact@v6
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
         with:
-          name: d2-prototype-hap
-          workflow: build-hap.yml
-          branch: main
-          path: ./artifacts
-        continue-on-error: true
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Build HAP if no artifact found
-        if: steps.download.outcome == 'failure'
-        run: echo "::warning::No pre-built artifact found. Trigger a build on main first."
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache HarmonyOS command-line tools
+        id: cache-cli-tools
+        uses: actions/cache@v4
+        with:
+          path: ~/commandline-tools
+          key: harmonyos-cli-${{ env.COMMANDLINE_TOOLS_VERSION }}-linux-x64
+
+      - name: Download HarmonyOS command-line tools
+        if: steps.cache-cli-tools.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARCHIVE_PREFIX="commandline-tools-linux-x64-${COMMANDLINE_TOOLS_VERSION}.zip"
+          gh release download "${COMMANDLINE_TOOLS_VERSION}" \
+            --repo "${COMMANDLINE_TOOLS_REPO}" \
+            --pattern "${ARCHIVE_PREFIX}.*" \
+            --dir /tmp/cli-parts
+          cat /tmp/cli-parts/${ARCHIVE_PREFIX}.* > /tmp/commandline-tools.zip
+          rm -rf /tmp/cli-parts
+          mkdir -p ~/commandline-tools
+          unzip -qo /tmp/commandline-tools.zip -d ~/commandline-tools
+          rm /tmp/commandline-tools.zip
+
+      - name: Setup OpenHarmony SDK
+        id: ohos-sdk
+        uses: openharmony-rs/setup-ohos-sdk@v1
+        with:
+          version: "5.0.0"
+
+      - name: Setup tool paths
+        run: |
+          OHPM_BIN=$(find ~/commandline-tools -type f -name "ohpm" -path "*/bin/*" | head -1)
+          if [ -n "$OHPM_BIN" ]; then
+            echo "$(dirname "$OHPM_BIN")" >> "$GITHUB_PATH"
+          else
+            echo "::error::ohpm binary not found"
+            exit 1
+          fi
+
+      - name: Configure SDK paths
+        run: |
+          SDK_RAW="${{ steps.ohos-sdk.outputs.ohos-base-sdk-home }}"
+          API_VERSION="${{ steps.ohos-sdk.outputs.api-version }}"
+
+          SDK_HOME="$HOME/ohos-sdk-home"
+          mkdir -p "$SDK_HOME"
+          ln -sfn "$SDK_RAW" "$SDK_HOME/$API_VERSION"
+
+          echo "OHOS_BASE_SDK_HOME=$SDK_HOME" >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK_HOME" > local.properties
+
+          MODULECHECK="$SDK_RAW/toolchains/modulecheck"
+          mkdir -p "$MODULECHECK"
+          PERMISSIVE='{"type":"object","additionalProperties":true}'
+          for schema in app.json module.json forms.json pages.json routerMap.json appStartup.json insightIntent.json customUtds.json arkDataSchema.json; do
+            [ -f "$MODULECHECK/$schema" ] || echo "$PERMISSIVE" > "$MODULECHECK/$schema"
+          done
+
+          CONFIGCHECK="$SDK_RAW/toolchains/configcheck"
+          mkdir -p "$CONFIGCHECK"
+          for schema in configSchema_rich.json configSchema_lite.json; do
+            [ -f "$CONFIGCHECK/$schema" ] || echo "$PERMISSIVE" > "$CONFIGCHECK/$schema"
+          done
+
+          DEVICE_DEFINE="$SDK_RAW/ets/api/device-define"
+          mkdir -p "$DEVICE_DEFINE"
+          SYSCAPS='{"SysCaps":["SystemCapability.ArkUI.ArkUI.Full","SystemCapability.Communication.NetStack","SystemCapability.Notification.Notification","SystemCapability.Security.AccessToken","SystemCapability.Ability.AbilityRuntime.Core","SystemCapability.Ability.AbilityRuntime.AbilityCore","SystemCapability.BundleManager.BundleFramework.Core","SystemCapability.Base","SystemCapability.Sensors.Sensor","SystemCapability.PowerManager.BatteryManager.Core","SystemCapability.Health.HealthStore"]}'
+          for device in default wearable phone tablet tv car; do
+            [ -f "$DEVICE_DEFINE/$device.json" ] || echo "$SYSCAPS" > "$DEVICE_DEFINE/$device.json"
+          done
+
+          find "$SDK_RAW/toolchains" -type f ! -name "*.json" ! -name "*.jar" ! -name "*.txt" ! -name "*.xml" ! -name "*.cfg" -exec chmod +x {} \; 2>/dev/null
+          find "$SDK_RAW/ets" -type f \( -name "es2abc" -o -name "ark_*" -o -name "ts2abc" \) -exec chmod +x {} \; 2>/dev/null
+
+      - name: Configure registries
+        run: |
+          ohpm config set registry https://repo.harmonyos.com/ohpm/
+          npm config set registry https://repo.huaweicloud.com/repository/npm/
+          npm config set @ohos:registry https://repo.harmonyos.com/npm/
+
+      - name: Install ohpm dependencies
+        run: ohpm install --all || true
+
+      - name: Update version in app config
+        run: |
+          node -e "
+            const fs = require('fs');
+            let content = fs.readFileSync('AppScope/app.json5', 'utf8');
+            content = content.replace(/\"versionName\":\s*\"[^\"]*\"/, '\"versionName\": \"${VERSION}\"');
+            fs.writeFileSync('AppScope/app.json5', content);
+            console.log('Updated versionName to ${VERSION}');
+          "
+
+      - name: Build HAP
+        run: |
+          chmod +x ./hvigorw
+          ./hvigorw assembleHap -p buildMode=debug --no-daemon
 
       - name: Find HAP files
         id: find-hap
         run: |
-          HAP_FILES=$(find ./artifacts -name "*.hap" 2>/dev/null | head -5)
-          if [ -z "$HAP_FILES" ]; then
-            echo "No .hap files found in artifacts"
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Found HAP files:"
-            echo "$HAP_FILES"
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "files<<EOF" >> "$GITHUB_OUTPUT"
-            echo "$HAP_FILES" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "::group::HAP files"
+          find . -name "*.hap" -type f 2>/dev/null
+          echo "::endgroup::"
+
+          HAP_FILE=$(find . -name "*.hap" -type f | head -1)
+          if [ -z "$HAP_FILE" ]; then
+            echo "::error::No .hap file produced by build"
+            exit 1
           fi
+          echo "hap_file=$HAP_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: D2 Prototype ${{ steps.version.outputs.tag }}
+          tag_name: ${{ env.TAG }}
+          name: D2 Prototype ${{ env.TAG }}
           body: |
-            ## D2 Prototype ${{ steps.version.outputs.tag }}
+            ## D2 Prototype ${{ env.TAG }}
 
             ### Install on Huawei Watch D2
             1. Download the `.hap` file below
@@ -64,7 +182,8 @@ jobs:
             3. Or install via HDC: `hdc install <filename>.hap`
 
             See [README](../blob/main/README.md) for full setup instructions.
-          files: ./artifacts/**/*.hap
+          files: |
+            **/*.hap
           fail_on_unmatched_files: false
           draft: false
-          prerelease: false
+          prerelease: ${{ inputs.prerelease }}
