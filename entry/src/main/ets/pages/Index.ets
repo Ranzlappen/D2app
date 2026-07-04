@@ -3,6 +3,8 @@ import batteryInfo from '@ohos.batteryInfo';
 import promptAction from '@ohos.promptAction';
 import common from '@ohos.app.ability.common';
 import { requestPermissions } from '../common/Permissions';
+import { formatClock } from '../common/TimeFormat';
+import { formatBattery, isValidHeartRate, roundHeartRate } from '../common/Formatting';
 
 @Entry
 @Component
@@ -41,9 +43,7 @@ struct Index {
 
   private updateTime(): void {
     const now = new Date();
-    const hours = now.getHours().toString().padStart(2, '0');
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    this.currentTime = `${hours}:${minutes}`;
+    this.currentTime = formatClock(now.getHours(), now.getMinutes());
   }
 
   private updateBattery(): void {
@@ -67,8 +67,8 @@ struct Index {
   private startHeartRateSensor(): void {
     try {
       sensor.on(sensor.SensorId.HEART_RATE, (data) => {
-        if (data.heartRate > 0) {
-          this.heartRate = Math.round(data.heartRate);
+        if (isValidHeartRate(data.heartRate)) {
+          this.heartRate = roundHeartRate(data.heartRate);
           this.hrStatus = '';
         }
       }, { interval: 3000000000 }); // ~3 seconds in nanoseconds
@@ -118,7 +118,7 @@ struct Index {
       Row() {
         Text('\uD83D\uDD0B')
           .fontSize(14)
-        Text(this.batteryLevel >= 0 ? ` ${this.batteryLevel}%` : ' --')
+        Text(` ${formatBattery(this.batteryLevel)}`)
           .fontSize(14)
           .fontColor('#AAAAAA')
           .margin({ left: 4 })
