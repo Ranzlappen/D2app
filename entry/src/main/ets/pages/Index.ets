@@ -1,6 +1,8 @@
 import sensor from '@ohos.sensor';
 import batteryInfo from '@ohos.batteryInfo';
 import promptAction from '@ohos.promptAction';
+import common from '@ohos.app.ability.common';
+import { requestPermissions } from '../common/Permissions';
 
 @Entry
 @Component
@@ -16,7 +18,7 @@ struct Index {
   aboutToAppear(): void {
     this.updateTime();
     this.updateBattery();
-    this.startHeartRateSensor();
+    this.initHeartRate();
 
     this.timeInterval = setInterval(() => {
       this.updateTime();
@@ -49,6 +51,16 @@ struct Index {
       this.batteryLevel = batteryInfo.batterySOC;
     } catch (e) {
       this.batteryLevel = -1;
+    }
+  }
+
+  private async initHeartRate(): Promise<void> {
+    const context = getContext(this) as common.UIAbilityContext;
+    const granted = await requestPermissions(context, ['ohos.permission.READ_HEALTH_DATA']);
+    if (granted) {
+      this.startHeartRateSensor();
+    } else {
+      this.hrStatus = 'Permission denied';
     }
   }
 
