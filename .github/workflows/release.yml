@@ -41,18 +41,37 @@ jobs:
         run: |
           node -e "
             const fs = require('fs');
+            const version = process.env.VERSION;
+            // versionCode = major*1000000 + minor*1000 + patch
+            // (consistent with the original 1000000 == 1.0.0).
+            // Pre-release suffixes share the code of their final version.
+            const m = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+            const code = Number(m[1]) * 1000000 + Number(m[2]) * 1000 + Number(m[3]);
             let content = fs.readFileSync('AppScope/app.json5', 'utf8');
-            content = content.replace(/\"versionName\":\s*\"[^\"]*\"/, '\"versionName\": \"${VERSION}\"');
+            content = content.replace(/\"versionName\":\s*\"[^\"]*\"/, '\"versionName\": \"' + version + '\"');
+            content = content.replace(/\"versionCode\":\s*\d+/, '\"versionCode\": ' + code);
             fs.writeFileSync('AppScope/app.json5', content);
-            console.log('Updated versionName to ${VERSION}');
+            console.log('Updated versionName to ' + version + ', versionCode to ' + code);
           "
 
-      - name: Build HAP
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet AppScope/app.json5; then
+            echo "Version already at $VERSION, nothing to commit"
+          else
+            git add AppScope/app.json5
+            git commit -m "chore(release): bump version to $VERSION"
+            git push origin "HEAD:${{ github.ref_name }}"
+          fi
+
+      - name: Build HAP (release)
         run: |
           chmod +x ./hvigorw
-          ./hvigorw assembleHap -p buildMode=debug --no-daemon
+          ./hvigorw assembleHap -p buildMode=release --no-daemon
 
-      - name: Find HAP files
+      - name: Collect HAP artifact
         id: find-hap
         run: |
           echo "::group::HAP files"
@@ -64,12 +83,56 @@ jobs:
             echo "::error::No .hap file produced by build"
             exit 1
           fi
-          echo "hap_file=$HAP_FILE" >> "$GITHUB_OUTPUT"
+
+          mkdir -p dist
+          UNSIGNED="dist/d2-prototype-v${VERSION}-unsigned.hap"
+          cp "$HAP_FILE" "$UNSIGNED"
+          echo "unsigned_hap=$UNSIGNED" >> "$GITHUB_OUTPUT"
+
+      # Signs the HAP when the HOS_* secrets are configured (see
+      # docs/build-and-release.md for how to obtain them from AppGallery
+      # Connect). Without secrets the release ships the unsigned HAP, which
+      # must then be signed locally before it can run on a watch.
+      - name: Sign HAP (if signing secrets are configured)
+        if: ${{ secrets.HOS_KEYSTORE_B64 != '' }}
+        env:
+          HOS_KEYSTORE_B64: ${{ secrets.HOS_KEYSTORE_B64 }}
+          HOS_CERT_B64: ${{ secrets.HOS_CERT_B64 }}
+          HOS_PROFILE_B64: ${{ secrets.HOS_PROFILE_B64 }}
+          HOS_KEYSTORE_PASSWORD: ${{ secrets.HOS_KEYSTORE_PASSWORD }}
+          HOS_KEY_ALIAS: ${{ secrets.HOS_KEY_ALIAS }}
+          HOS_KEY_PASSWORD: ${{ secrets.HOS_KEY_PASSWORD }}
+        run: |
+          SIGN_TOOL=$(find "$OHOS_BASE_SDK_HOME" -name "hap-sign-tool*.jar" 2>/dev/null | head -1)
+          if [ -z "$SIGN_TOOL" ]; then
+            echo "::error::hap-sign-tool not found in SDK toolchains"
+            exit 1
+          fi
+
+          SIGNING_DIR=$(mktemp -d)
+          echo "$HOS_KEYSTORE_B64" | base64 -d > "$SIGNING_DIR/keystore.p12"
+          echo "$HOS_CERT_B64" | base64 -d > "$SIGNING_DIR/cert.cer"
+          echo "$HOS_PROFILE_B64" | base64 -d > "$SIGNING_DIR/profile.p7b"
+
+          SIGNED="dist/d2-prototype-v${VERSION}-signed.hap"
+          java -jar "$SIGN_TOOL" sign-app \
+            -mode localSign \
+            -signAlg SHA256withECDSA \
+            -keyAlias "$HOS_KEY_ALIAS" \
+            -keystoreFile "$SIGNING_DIR/keystore.p12" \
+            -keystorePwd "$HOS_KEYSTORE_PASSWORD" \
+            -keyPwd "$HOS_KEY_PASSWORD" \
+            -appCertFile "$SIGNING_DIR/cert.cer" \
+            -profileFile "$SIGNING_DIR/profile.p7b" \
+            -inFile "${{ steps.find-hap.outputs.unsigned_hap }}" \
+            -outFile "$SIGNED" \
+            -signCode 1
+
+          rm -rf "$SIGNING_DIR"
+          echo "Signed HAP written to $SIGNED"
 
       - name: Create tag
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
 
@@ -82,13 +145,11 @@ jobs:
             ## D2 Prototype ${{ env.TAG }}
 
             ### Install on Huawei Watch D2
-            1. Download the `.hap` file below
-            2. Transfer to your phone and install via **HUAWEI DevEco Assistant**
-            3. Or install via HDC: `hdc install <filename>.hap`
-
-            See [README](../blob/main/README.md) for full setup instructions.
+            1. Download the `.hap` file below (`-signed` if present, otherwise `-unsigned`)
+            2. An unsigned HAP must first be signed for your watch's UDID — see the [installation guide](https://github.com/${{ github.repository }}/blob/main/docs/installation.md)
+            3. Transfer to your phone and install via **HUAWEI DevEco Assistant**, or via HDC: `hdc install <filename>.hap`
           files: |
-            **/*.hap
-          fail_on_unmatched_files: false
+            dist/*.hap
+          fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ inputs.prerelease }}
