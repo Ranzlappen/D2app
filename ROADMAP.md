@@ -2,11 +2,11 @@
 
 Priorities for turning D2 Prototype from a demo into a genuinely useful wrist app. Contributions welcome — open an issue referencing the item before starting anything sizable.
 
-## P1 — Make it useful (next up)
+## P1 — Make it useful (shipped)
 
-- [ ] **Multi-page navigation** via `@ohos.router`: small nav affordances on the watch face; every page registered in `main_pages.json`.
-- [ ] **Steps / activity page** — pedometer via `sensor.SensorId.PEDOMETER`; requires `ohos.permission.ACTIVITY_MOTION` (user-grant, via `common/Permissions.ts`). Daily step count, large and glanceable.
-- [ ] **Settings page** — persisted with `@ohos.data.preferences`: 12/24-hour clock (feeds `common/TimeFormat.ts`), heart-rate polling interval (battery vs. freshness).
+- [x] **Multi-page navigation** via `@ohos.router`: small nav affordances on the watch face; every page registered in `main_pages.json`.
+- [x] **Steps / activity page** — pedometer via `sensor.SensorId.PEDOMETER`; requires `ohos.permission.ACTIVITY_MOTION` (user-grant, via `common/Permissions.ts`). Step count, large and glanceable.
+- [x] **Settings page** — persisted with `@ohos.data.preferences`: 12/24-hour clock (feeds `common/TimeFormat.ts`), heart-rate polling interval (battery vs. freshness).
 
 ## P2 — Wearable polish
 

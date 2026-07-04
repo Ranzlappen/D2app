@@ -2,9 +2,12 @@ import sensor from '@ohos.sensor';
 import batteryInfo from '@ohos.batteryInfo';
 import promptAction from '@ohos.promptAction';
 import common from '@ohos.app.ability.common';
+import router from '@ohos.router';
 import { requestPermissions } from '../common/Permissions';
 import { formatClock } from '../common/TimeFormat';
 import { formatBattery, isValidHeartRate, roundHeartRate } from '../common/Formatting';
+import { DEFAULT_SETTINGS, hrIntervalToNanos } from '../common/AppSettings';
+import { loadSettings } from '../common/SettingsStore';
 
 @Entry
 @Component
@@ -13,19 +16,52 @@ struct Index {
   @State heartRate: number = 0;
   @State batteryLevel: number = 0;
   @State hrStatus: string = 'Connecting...';
+  @State use24Hour: boolean = DEFAULT_SETTINGS.use24HourClock;
 
   private timeInterval: number = -1;
   private hrSensorStarted: boolean = false;
+  private hrIntervalNanos: number = hrIntervalToNanos(DEFAULT_SETTINGS.hrIntervalSeconds);
 
   aboutToAppear(): void {
     this.updateTime();
     this.updateBattery();
-    this.initHeartRate();
+    this.init();
 
     this.timeInterval = setInterval(() => {
       this.updateTime();
       this.updateBattery();
     }, 1000);
+  }
+
+  // Re-applies settings when returning from the settings page.
+  onPageShow(): void {
+    this.applySettings();
+  }
+
+  private async init(): Promise<void> {
+    await this.applySettings();
+    this.initHeartRate();
+  }
+
+  private async applySettings(): Promise<void> {
+    const context = getContext(this) as common.UIAbilityContext;
+    const settings = await loadSettings(context);
+    this.use24Hour = settings.use24HourClock;
+    this.updateTime();
+
+    const nanos = hrIntervalToNanos(settings.hrIntervalSeconds);
+    if (nanos !== this.hrIntervalNanos) {
+      this.hrIntervalNanos = nanos;
+      if (this.hrSensorStarted) {
+        try {
+          sensor.off(sensor.SensorId.HEART_RATE);
+        } catch (e) {
+          console.error('D2Prototype', 'Failed to restart HR sensor: ' + JSON.stringify(e));
+        }
+        this.hrSensorStarted = false;
+        this.startHeartRateSensor();
+      }
+    }
   }
 
   aboutToDisappear(): void {
@@ -43,7 +79,7 @@ struct Index {
 
   private updateTime(): void {
     const now = new Date();
-    this.currentTime = formatClock(now.getHours(), now.getMinutes());
+    this.currentTime = formatClock(now.getHours(), now.getMinutes(), this.use24Hour);
   }
 
   private updateBattery(): void {
@@ -71,7 +107,7 @@ struct Index {
           this.heartRate = roundHeartRate(data.heartRate);
           this.hrStatus = '';
         }
-      }, { interval: 3000000000 }); // ~3 seconds in nanoseconds
+      }, { interval: this.hrIntervalNanos });
       this.hrSensorStarted = true;
       this.hrStatus = 'Measuring...';
     } catch (e) {
@@ -144,6 +180,26 @@ struct Index {
           duration: 2000
         });
       })
+
+      // Navigation to sub-pages
+      Row() {
+        Text('👣')
+          .fontSize(20)
+          .padding(8)
+          .onClick(() => {
+            router.pushUrl({ url: 'pages/StepsPage' });
+          })
+        Text('⚙')
+          .fontSize(20)
+          .fontColor('#AAAAAA')
+          .padding(8)
+          .margin({ left: 16 })
+          .onClick(() => {
+            router.pushUrl({ url: 'pages/SettingsPage' });
+          })
+      }
+      .margin({ top: 14 })
+      .justifyContent(FlexAlign.Center)
     }
     .width('100%')
     .height('100%')

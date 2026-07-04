@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: se
 ## [Unreleased]
 
 ### Added
+- Steps page (pedometer) and Settings page (12/24-hour clock, heart-rate polling interval), navigable from the watch face
 - Runtime permission request for heart-rate access (fixes HR stuck on "Unavailable" on real hardware)
 - Unit tests for display logic (`npm test`), run on every PR
 - PR-gated CI builds, shared composite setup action, hvigor caching
