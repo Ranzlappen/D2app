@@ -1,0 +1,18 @@
+{
+  // Configuration for HarmonyOS codelinter (DevEco Studio Code Linter and
+  // the command-line `codelinter` binary, when available).
+  "files": [
+    "entry/src/main/ets/**/*.ets",
+    "entry/src/main/ets/**/*.ts"
+  ],
+  "ignore": [
+    "**/build/**",
+    "**/node_modules/**",
+    "**/oh_modules/**",
+    "tests/**"
+  ],
+  "ruleSet": [
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "rules": {}
+}

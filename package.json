@@ -1,0 +1,13 @@
+{
+  "name": "d2app-devtools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dev tooling only (unit-test runner). App dependencies belong in oh-package.json5 (ohpm), not here.",
+  "scripts": {
+    "test": "tsx --test tests/unit/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}
